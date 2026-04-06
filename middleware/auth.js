@@ -5,7 +5,10 @@ const protect = async (req, res, next) => {
     try {
         let token;
 
-        if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+        if (
+            req.headers.authorization &&
+            req.headers.authorization.startsWith('Bearer ')
+        ) {
             token = req.headers.authorization.split(' ')[1];
         }
 
@@ -16,11 +19,11 @@ const protect = async (req, res, next) => {
             });
         }
 
-        // Verify token
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-        // Get user from token
-        const user = await User.findById(decoded.id).select('-password -encrypted_sin -mfaSecret');
+        const user = await User.findById(decoded.id).select(
+            '-password -encrypted_sin -mfaSecret'
+        );
 
         if (!user) {
             return res.status(401).json({
@@ -40,4 +43,24 @@ const protect = async (req, res, next) => {
     }
 };
 
-module.exports = { protect };
+const authorize = (...roles) => {
+    return (req, res, next) => {
+        if (!req.user) {
+            return res.status(401).json({
+                success: false,
+                message: 'Not authorized'
+            });
+        }
+
+        if (!roles.includes(req.user.role)) {
+            return res.status(403).json({
+                success: false,
+                message: `Role '${req.user.role}' is not allowed to access this route`
+            });
+        }
+
+        next();
+    };
+};
+
+module.exports = { protect, authorize };

@@ -106,10 +106,10 @@ const userSchema = new mongoose.Schema({
         default: 'user'
     },
     userType: {
-        type: String,
-        enum: ['gig-worker', 'contractor', 'trades', 'shop-owner', 'student', 'employee', 'other'],
-        required: true
-    },
+    type: String,
+    enum: ['gig-worker', 'contractor', 'trades', 'business-owner', 'student', 'employee', 'other'],
+    required: true
+},
     profileImage: {
         type: String,
         default: 'default-avatar.png'
@@ -285,8 +285,6 @@ const userSchema = new mongoose.Schema({
 });
 
 // Create index for faster client ID searches
-userSchema.index({ clientId: 1 });
-userSchema.index({ email: 1 });
 userSchema.index({ role: 1 });
 
 // Virtual for full address

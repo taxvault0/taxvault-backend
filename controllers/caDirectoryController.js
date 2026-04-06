@@ -1,15 +1,28 @@
 const CAProfile = require('../models/CAProfile');
 const CAConnection = require('../models/CAConnection');
 const User = require('../models/User');
+const CaAccess = require('../models/CaAccess');
+const createNotification = require('../utils/createNotification');
 
 // @desc    Create or update CA profile
 // @route   POST /api/ca/profile
 exports.createOrUpdateProfile = async (req, res) => {
   try {
-    const { 
-      firmName, bio, yearsOfExperience, address, city, province, 
-      postalCode, serviceRadius, specializations, services, languages,
-      phone, website, availableFor
+    const {
+      firmName,
+      bio,
+      yearsOfExperience,
+      address,
+      city,
+      province,
+      postalCode,
+      serviceRadius,
+      specializations,
+      services,
+      languages,
+      phone,
+      website,
+      availableFor
     } = req.body;
 
     // Geocode address (simplified - in production use Google Maps API)
@@ -41,13 +54,13 @@ exports.createOrUpdateProfile = async (req, res) => {
       { new: true, upsert: true, runValidators: true }
     );
 
-    res.json({
+    return res.json({
       success: true,
       profile
     });
   } catch (error) {
     console.error('Error updating CA profile:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Error updating profile'
     });
@@ -62,20 +75,27 @@ exports.toggleAcceptingStatus = async (req, res) => {
 
     const profile = await CAProfile.findOneAndUpdate(
       { user: req.user.id },
-      { 
+      {
         acceptingNewClients: accepting,
         availabilityStatus: accepting ? 'active' : 'not-accepting'
       },
       { new: true }
     );
 
-    res.json({
+    if (!profile) {
+      return res.status(404).json({
+        success: false,
+        message: 'CA profile not found'
+      });
+    }
+
+    return res.json({
       success: true,
       acceptingNewClients: profile.acceptingNewClients
     });
   } catch (error) {
     console.error('Error toggling status:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Error updating status'
     });
@@ -86,35 +106,36 @@ exports.toggleAcceptingStatus = async (req, res) => {
 // @route   GET /api/ca/search
 exports.searchCAs = async (req, res) => {
   try {
-    const { 
-      lat, lng, maxDistance = 50000, // in meters (50km default)
-      specialization, service, acceptingNewClients,
-      userType, limit = 20, page = 1
+    const {
+      lat,
+      lng,
+      maxDistance = 50000, // in meters (50km default)
+      specialization,
+      service,
+      acceptingNewClients,
+      userType,
+      limit = 20,
+      page = 1
     } = req.query;
 
     const query = { verified: true };
 
-    // Filter by accepting clients
     if (acceptingNewClients === 'true') {
       query.acceptingNewClients = true;
     }
 
-    // Filter by user type specialization
     if (userType && userType !== 'all') {
       query.availableFor = { $in: [userType, 'all'] };
     }
 
-    // Filter by specialization
     if (specialization && specialization !== 'all') {
       query.specializations = specialization;
     }
 
-    // Filter by service
     if (service && service !== 'all') {
       query.services = service;
     }
 
-    // Location-based search
     let sort = {};
     if (lat && lng) {
       query.location = {
@@ -123,51 +144,53 @@ exports.searchCAs = async (req, res) => {
             type: 'Point',
             coordinates: [parseFloat(lng), parseFloat(lat)]
           },
-          $maxDistance: parseInt(maxDistance)
+          $maxDistance: parseInt(maxDistance, 10)
         }
       };
     } else {
-      // If no location, sort by rating
       sort = { rating: -1, reviewCount: -1 };
     }
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const parsedPage = parseInt(page, 10);
+    const parsedLimit = parseInt(limit, 10);
+    const skip = (parsedPage - 1) * parsedLimit;
 
     const [profiles, total] = await Promise.all([
       CAProfile.find(query)
         .populate('user', 'name email')
         .sort(sort)
         .skip(skip)
-        .limit(parseInt(limit))
+        .limit(parsedLimit)
         .lean(),
       CAProfile.countDocuments(query)
     ]);
 
-    // Add distance information
-    const results = profiles.map(profile => ({
+    const results = profiles.map((profile) => ({
       ...profile,
-      distance: profile.location?.coordinates 
-        ? calculateDistance(
-            parseFloat(lat), parseFloat(lng),
-            profile.location.coordinates[1], 
-            profile.location.coordinates[0]
-          )
-        : null
+      distance:
+        lat && lng && profile.location?.coordinates
+          ? calculateDistance(
+              parseFloat(lat),
+              parseFloat(lng),
+              profile.location.coordinates[1],
+              profile.location.coordinates[0]
+            )
+          : null
     }));
 
-    res.json({
+    return res.json({
       success: true,
       results,
       pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
+        page: parsedPage,
+        limit: parsedLimit,
         total,
-        pages: Math.ceil(total / parseInt(limit))
+        pages: Math.ceil(total / parsedLimit)
       }
     });
   } catch (error) {
     console.error('Error searching CAs:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Error searching for CAs'
     });
@@ -189,19 +212,18 @@ exports.getCAProfile = async (req, res) => {
       });
     }
 
-    // Increment view count
     await CAProfile.updateOne(
       { user: req.params.id },
       { $inc: { profileViews: 1 } }
     );
 
-    res.json({
+    return res.json({
       success: true,
       profile
     });
   } catch (error) {
     console.error('Error fetching CA profile:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Error fetching profile'
     });
@@ -214,7 +236,21 @@ exports.requestConnection = async (req, res) => {
   try {
     const { caId, message } = req.body;
 
-    // Check if connection already exists
+    if (!caId) {
+      return res.status(400).json({
+        success: false,
+        message: 'caId is required'
+      });
+    }
+
+    const existingUser = await User.findById(caId).select('role name email');
+    if (!existingUser || existingUser.role !== 'ca') {
+      return res.status(404).json({
+        success: false,
+        message: 'CA not found'
+      });
+    }
+
     const existingConnection = await CAConnection.findOne({
       user: req.user.id,
       ca: caId
@@ -234,19 +270,30 @@ exports.requestConnection = async (req, res) => {
       initiatedBy: 'user'
     });
 
-    // Increment connection requests count for CA
     await CAProfile.updateOne(
       { user: caId },
       { $inc: { connectionRequests: 1 } }
     );
 
-    res.json({
+    await createNotification({
+      recipient: caId,
+      sender: req.user.id,
+      type: 'ca-connection-request',
+      title: 'New CA connection request',
+      message: `${req.user.name || 'A client'} sent you a connection request.`,
+      data: {
+        connectionId: connection._id,
+        route: '/ca/dashboard'
+      }
+    });
+
+    return res.json({
       success: true,
       connection
     });
   } catch (error) {
     console.error('Error requesting connection:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Error requesting connection'
     });
@@ -258,38 +305,181 @@ exports.requestConnection = async (req, res) => {
 exports.getCADashboardStats = async (req, res) => {
   try {
     const profile = await CAProfile.findOne({ user: req.user.id });
-    
+
     const connections = await CAConnection.find({ ca: req.user.id })
-      .populate('user', 'name email userType');
+      .populate('user', 'name email userType')
+      .sort({ createdAt: -1 });
 
     const stats = {
       profileViews: profile?.profileViews || 0,
       connectionRequests: profile?.connectionRequests || 0,
       acceptingNewClients: profile?.acceptingNewClients || false,
       totalConnections: connections.length,
-      pendingRequests: connections.filter(c => c.status === 'pending').length,
-      activeClients: connections.filter(c => c.status === 'accepted').length,
+      pendingRequests: connections.filter((c) => c.status === 'pending').length,
+      activeClients: connections.filter((c) => c.status === 'accepted').length,
       recentRequests: connections
-        .filter(c => c.status === 'pending')
+        .filter((c) => c.status === 'pending')
         .slice(0, 5)
-        .map(c => ({
+        .map((c) => ({
           id: c._id,
-          clientName: c.user.name,
-          clientType: c.user.userType,
+          clientName: c.user?.name,
+          clientType: c.user?.userType,
           message: c.message,
           date: c.createdAt
         }))
     };
 
-    res.json({
+    return res.json({
       success: true,
       stats
     });
   } catch (error) {
     console.error('Error fetching CA stats:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Error fetching stats'
+    });
+  }
+};
+
+// @desc    CA accepts or rejects a connection request
+// @route   PATCH /api/ca/connections/:connectionId/respond
+exports.respondToConnectionRequest = async (req, res) => {
+  try {
+    const { connectionId } = req.params;
+    const { action, note } = req.body;
+
+    if (!['accept', 'reject'].includes(action)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Action must be accept or reject'
+      });
+    }
+
+    const connection = await CAConnection.findById(connectionId)
+      .populate('user', 'name email role clientId')
+      .populate('ca', 'name email role');
+
+    if (!connection) {
+      return res.status(404).json({
+        success: false,
+        message: 'Connection request not found'
+      });
+    }
+
+    if (
+      String(connection.ca._id || connection.ca) !== String(req.user._id || req.user.id) &&
+      req.user.role !== 'admin'
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to respond to this request'
+      });
+    }
+
+    if (connection.status === 'accepted' || connection.status === 'rejected') {
+      return res.status(400).json({
+        success: false,
+        message: `This request has already been ${connection.status}`
+      });
+    }
+
+    if (action === 'accept') {
+      connection.status = 'accepted';
+      connection.respondedAt = new Date();
+      connection.responseNote = note || '';
+
+      await connection.save();
+
+      await CaAccess.findOneAndUpdate(
+        {
+          user: connection.user._id || connection.user,
+          ca: connection.ca._id || connection.ca
+        },
+        {
+          $set: {
+            user: connection.user._id || connection.user,
+            ca: connection.ca._id || connection.ca,
+            accessGranted: true,
+            accessType: 'full',
+            grantedAt: new Date(),
+            revokedAt: null
+          }
+        },
+        {
+          upsert: true,
+          new: true,
+          setDefaultsOnInsert: true
+        }
+      );
+
+      await createNotification({
+        recipient: connection.user._id || connection.user,
+        sender: req.user._id || req.user.id,
+        type: 'ca-connection-accepted',
+        title: 'CA connection accepted',
+        message: `${connection.ca.name} accepted your connection request.`,
+        data: {
+          connectionId: connection._id,
+          route: '/user/dashboard'
+        }
+      });
+
+      return res.json({
+        success: true,
+        message: 'Connection request accepted',
+        connection
+      });
+    }
+
+    connection.status = 'rejected';
+    connection.respondedAt = new Date();
+    connection.responseNote = note || '';
+
+    await connection.save();
+
+    await CaAccess.findOneAndUpdate(
+      {
+        user: connection.user._id || connection.user,
+        ca: connection.ca._id || connection.ca
+      },
+      {
+        $set: {
+          user: connection.user._id || connection.user,
+          ca: connection.ca._id || connection.ca,
+          accessGranted: false,
+          revokedAt: new Date()
+        }
+      },
+      {
+        upsert: true,
+        new: true,
+        setDefaultsOnInsert: true
+      }
+    );
+
+    await createNotification({
+      recipient: connection.user._id || connection.user,
+      sender: req.user._id || req.user.id,
+      type: 'ca-connection-rejected',
+      title: 'CA connection rejected',
+      message: `${connection.ca.name} rejected your connection request.`,
+      data: {
+        connectionId: connection._id,
+        route: '/user/dashboard'
+      }
+    });
+
+    return res.json({
+      success: true,
+      message: 'Connection request rejected',
+      connection
+    });
+  } catch (error) {
+    console.error('respondToConnectionRequest error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to respond to connection request'
     });
   }
 };
@@ -297,12 +487,16 @@ exports.getCADashboardStats = async (req, res) => {
 // Helper function to calculate distance between coordinates
 function calculateDistance(lat1, lon1, lat2, lon2) {
   const R = 6371; // Earth's radius in km
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = 
-    Math.sin(dLat/2) * Math.sin(dLat/2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-    Math.sin(dLon/2) * Math.sin(dLon/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return Math.round(R * c * 10) / 10;
 }

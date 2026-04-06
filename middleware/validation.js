@@ -38,7 +38,7 @@ const authValidators = {
             .matches(/^(?=.*[A-Za-z])(?=.*\d)/).withMessage('Password must contain at least one letter and one number')
             .not().matches(/^$|\s+/).withMessage('Password cannot contain spaces'),
         body('userType')
-            .isIn(['gig-worker', 'contractor', 'trades', 'shop-owner', 'student', 'employee', 'other'])
+            .isIn(['gig-worker', 'contractor', 'trades', 'business-owner', 'student', 'employee', 'other'])
             .withMessage('Invalid user type'),
         body('phoneNumber')
             .optional()
