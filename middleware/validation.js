@@ -10,7 +10,7 @@ const validate = (validations) => {
             return next();
         }
 
-        return res.status(400).json({ 
+        return res.status(400).json({
             success: false,
             message: 'Validation failed',
             errors: errors.array().map(err => ({
@@ -31,7 +31,9 @@ const authValidators = {
             .escape(),
         body('email')
             .isEmail().withMessage('Please provide a valid email')
-            .normalizeEmail()
+            .normalizeEmail({
+                gmail_remove_dots: false
+            })
             .toLowerCase(),
         body('password')
             .isLength({ min: 8 }).withMessage('Password must be at least 8 characters')
@@ -42,12 +44,19 @@ const authValidators = {
             .withMessage('Invalid user type'),
         body('phoneNumber')
             .optional()
-            .matches(/^\+?1?\d{10,14}$/).withMessage('Please enter a valid Canadian phone number')
+            .matches(/^\+?1?\d{10,14}$/).withMessage('Please enter a valid Canadian phone number'),
+        body('filingFrequency')
+            .optional({ checkFalsy: true })
+            .isIn(['monthly', 'quarterly', 'annual'])
+            .withMessage('Invalid filing frequency')
     ],
     login: [
         body('email')
             .isEmail().withMessage('Please provide a valid email')
-            .normalizeEmail(),
+            .normalizeEmail({
+                gmail_remove_dots: false
+            })
+            .toLowerCase(),
         body('password')
             .notEmpty().withMessage('Password is required')
     ],
@@ -136,7 +145,10 @@ const caAccessValidators = {
     invite: [
         body('caEmail')
             .isEmail().withMessage('Please provide a valid CA email')
-            .normalizeEmail(),
+            .normalizeEmail({
+                gmail_remove_dots: false
+            })
+            .toLowerCase(),
         body('permissionLevel')
             .isIn(['read-only', 'full']).withMessage('Invalid permission level'),
         body('taxYears')

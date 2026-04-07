@@ -30,34 +30,68 @@ const notificationRoutes = require('./routes/notification.routes');
 const app = express();
 
 // Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI)
+console.log('MONGO_URI:', process.env.MONGO_URI);
+
+mongoose
+  .connect(process.env.MONGO_URI)
   .then(() => console.log('✅ MongoDB connected successfully'))
   .catch((err) => {
     console.error('❌ MongoDB connection error:', err);
     process.exit(1);
   });
 
-app.use(helmet({ contentSecurityPolicy: false }));
+// Security headers
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+  })
+);
 
-app.use(cors({
-  origin: [process.env.FRONTEND_URL, process.env.MOBILE_APP_URL].filter(Boolean),
-  credentials: true,
-  optionsSuccessStatus: 200
-}));
+// CORS setup
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  process.env.MOBILE_APP_URL,
+].filter(Boolean);
 
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error(`CORS blocked for origin: ${origin}`));
+    },
+    credentials: true,
+    optionsSuccessStatus: 200,
+  })
+);
+
+// Optional: handle preflight explicitly
+app.options('*', cors());
+
+// Rate limiting
 const limiter = rateLimit({
   windowMs: Number(process.env.RATE_LIMIT_WINDOW || 15) * 60 * 1000,
   max: Number(process.env.RATE_LIMIT_MAX || 100),
-  message: 'Too many requests from this IP, please try again later.'
+  message: 'Too many requests from this IP, please try again later.',
 });
 
 app.use('/api', limiter);
+
+// Body parsers
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Sanitizers / protections
 app.use(mongoSanitize());
 app.use(xss());
 app.use(hpp());
+
+// Logging
 app.use(morgan(process.env.NODE_ENV === 'development' ? 'dev' : 'combined'));
+
+// Static uploads
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // API routes
@@ -77,19 +111,25 @@ app.use('/api/tax-case-timeline', taxCaseTimelineRoutes);
 app.use('/api/tax-case-notes', taxCaseNoteRoutes);
 app.use('/api/notifications', notificationRoutes);
 
+// Health check
 app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'OK',
     timestamp: new Date(),
     environment: process.env.NODE_ENV,
-    version: '1.0.0'
+    version: '1.0.0',
   });
 });
 
+// 404 handler
 app.use((req, res) => {
-  res.status(404).json({ success: false, message: 'Route not found' });
+  res.status(404).json({
+    success: false,
+    message: 'Route not found',
+  });
 });
 
+// Global error handler
 app.use((err, req, res, next) => {
   console.error('❌ Error:', err.stack);
 
@@ -99,7 +139,7 @@ app.use((err, req, res, next) => {
   res.status(statusCode).json({
     success: false,
     message,
-    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
   });
 });
 
@@ -107,4 +147,5 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV}`);
+  console.log(`🌐 Allowed origins: ${allowedOrigins.join(', ') || 'none set'}`);
 });

@@ -15,8 +15,10 @@ const taxUtils = require('../utils/taxUtils');
 
 // Generate JWT Token
 const generateToken = (id) => {
+    const expiresIn = (process.env.JWT_EXPIRE || '7d').trim();
+
     return jwt.sign({ id }, process.env.JWT_SECRET, {
-        expiresIn: process.env.JWT_EXPIRE
+        expiresIn
     });
 };
 
@@ -96,8 +98,12 @@ router.post('/register', validate(authValidators.register), async (req, res) => 
         const verificationToken = user.createEmailVerificationToken();
         await user.save({ validateBeforeSave: false });
 
-        // Send welcome email (in production, send verification email instead)
-        await sendWelcomeEmail(user);
+        // Send welcome email safely (do not break registration if email fails)
+        try {
+            await sendWelcomeEmail(user);
+        } catch (emailError) {
+            console.error('Welcome email failed:', emailError.message);
+        }
 
         // Generate token
         const token = generateToken(user._id);
@@ -250,7 +256,7 @@ router.get('/tax-info', protect, async (req, res) => {
             agency: taxUtils.getTaxAgency(user.province),
             rate: taxUtils.calculateTaxes(100, user.province),
             businessNumberFormat: taxUtils.getBusinessNumberFormat(user.province),
-            filingDeadline: user.filingDeadline, // from virtual
+            filingDeadline: user.filingDeadline,
             requiresSeparateFiling: user.requiresSeparateProvincialFiling,
             taxType: user.taxType,
             taxRate: user.taxRate,
@@ -270,8 +276,6 @@ router.get('/tax-info', protect, async (req, res) => {
     }
 });
 
-// Rest of your existing routes remain unchanged...
-
 // @desc    Login user
 // @route   POST /api/auth/login
 // @access  Public
@@ -279,7 +283,6 @@ router.post('/login', validate(authValidators.login), async (req, res) => {
     try {
         const { email, password } = req.body;
 
-        // Check for user
         const user = await User.findOne({ email }).select('+password +loginAttempts +lockUntil +mfaEnabled +mfaSecret');
 
         if (!user) {
@@ -289,7 +292,6 @@ router.post('/login', validate(authValidators.login), async (req, res) => {
             });
         }
 
-        // Check if account is locked
         if (user.isLocked()) {
             const remainingTime = Math.ceil((user.lockUntil - Date.now()) / 1000 / 60);
             return res.status(401).json({
@@ -298,18 +300,15 @@ router.post('/login', validate(authValidators.login), async (req, res) => {
             });
         }
 
-        // Check password
         const isMatch = await user.comparePassword(password);
 
         if (!isMatch) {
-            // Increment login attempts
             user.loginAttempts += 1;
-            
-            // Lock account after 5 failed attempts
+
             if (user.loginAttempts >= 5) {
-                user.lockUntil = Date.now() + 30 * 60 * 1000; // Lock for 30 minutes
+                user.lockUntil = Date.now() + 30 * 60 * 1000;
             }
-            
+
             await user.save({ validateBeforeSave: false });
 
             return res.status(401).json({
@@ -318,13 +317,11 @@ router.post('/login', validate(authValidators.login), async (req, res) => {
             });
         }
 
-        // Reset login attempts on successful login
         user.loginAttempts = 0;
         user.lockUntil = undefined;
         user.lastLogin = Date.now();
         await user.save({ validateBeforeSave: false });
 
-        // Check if MFA is enabled
         if (user.mfaEnabled) {
             return res.json({
                 success: true,
@@ -333,10 +330,8 @@ router.post('/login', validate(authValidators.login), async (req, res) => {
             });
         }
 
-        // Generate token
         const token = generateToken(user._id);
 
-        // Include tax info in login response
         let taxInfo = {};
         if (user.province) {
             taxInfo = {
@@ -388,7 +383,6 @@ router.post('/verify-mfa', validate(authValidators.verifyMfa), async (req, res) 
             });
         }
 
-        // Check if token is a backup code
         if (user.mfaBackupCodes && user.mfaBackupCodes.length > 0) {
             const backupCode = user.mfaBackupCodes.find(
                 code => code.code === token && !code.used
@@ -399,7 +393,7 @@ router.post('/verify-mfa', validate(authValidators.verifyMfa), async (req, res) 
                 await user.save({ validateBeforeSave: false });
 
                 const jwtToken = generateToken(user._id);
-                
+
                 return res.json({
                     success: true,
                     token: jwtToken,
@@ -413,7 +407,6 @@ router.post('/verify-mfa', validate(authValidators.verifyMfa), async (req, res) 
             }
         }
 
-        // Verify TOTP
         const verified = speakeasy.totp.verify({
             secret: user.mfaSecret,
             encoding: 'base32',
@@ -428,7 +421,6 @@ router.post('/verify-mfa', validate(authValidators.verifyMfa), async (req, res) 
             });
         }
 
-        // Generate JWT
         const jwtToken = generateToken(user._id);
 
         res.json({
@@ -457,12 +449,10 @@ router.post('/setup-mfa', protect, async (req, res) => {
     try {
         const user = await User.findById(req.user.id).select('+mfaSecret');
 
-        // Generate secret
         const secret = speakeasy.generateSecret({
             name: `TaxVault Canada (${req.user.email})`
         });
 
-        // Generate backup codes
         const backupCodes = [];
         for (let i = 0; i < 10; i++) {
             backupCodes.push({
@@ -471,12 +461,10 @@ router.post('/setup-mfa', protect, async (req, res) => {
             });
         }
 
-        // Save to user
         user.mfaSecret = secret.base32;
         user.mfaBackupCodes = backupCodes;
         await user.save();
 
-        // Generate QR code
         const qrCode = await QRCode.toDataURL(secret.otpauth_url);
 
         res.json({
@@ -502,7 +490,6 @@ router.post('/enable-mfa', protect, validate(authValidators.verifyMfa), async (r
         const { token } = req.body;
         const user = await User.findById(req.user.id).select('+mfaSecret');
 
-        // Verify token
         const verified = speakeasy.totp.verify({
             secret: user.mfaSecret,
             encoding: 'base32',
@@ -564,7 +551,6 @@ router.post('/disable-mfa', protect, async (req, res) => {
 router.post('/forgot-password', [
     body('email').isEmail().withMessage('Please provide a valid email')
 ], async (req, res) => {
-    
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
         return res.status(400).json({
@@ -585,11 +571,9 @@ router.post('/forgot-password', [
             });
         }
 
-        // Generate reset token
         const resetToken = user.createPasswordResetToken();
         await user.save({ validateBeforeSave: false });
 
-        // Send email
         await sendPasswordResetEmail(user, resetToken);
 
         res.json({
@@ -626,7 +610,6 @@ router.put('/reset-password/:token', [
         const { token } = req.params;
         const { password } = req.body;
 
-        // Hash token
         const hashedToken = crypto
             .createHash('sha256')
             .update(token)
@@ -644,7 +627,6 @@ router.put('/reset-password/:token', [
             });
         }
 
-        // Update password
         user.password = password;
         user.passwordResetToken = undefined;
         user.passwordResetExpires = undefined;
@@ -712,7 +694,6 @@ router.get('/me', protect, async (req, res) => {
             .select('-__v')
             .lean();
 
-        // Add tax info
         let taxInfo = {};
         if (user.province) {
             taxInfo = {
