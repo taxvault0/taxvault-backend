@@ -55,6 +55,36 @@ const FILING_DEADLINES = {
     },
 };
 
+const vehicleSchema = new mongoose.Schema(
+    {
+        ownerPerson: {
+            type: String,
+            default: ''
+        },
+        ownershipType: {
+            type: String,
+            default: ''
+        },
+        mainUse: {
+            type: String,
+            default: ''
+        },
+        purchaseDate: {
+            type: String,
+            default: ''
+        },
+        purchasePrice: {
+            type: String,
+            default: ''
+        },
+        gstHstPaid: {
+            type: String,
+            default: ''
+        }
+    },
+    { _id: false }
+);
+
 const userSchema = new mongoose.Schema({
     name: {
         type: String,
@@ -101,24 +131,29 @@ const userSchema = new mongoose.Schema({
         type: String,
         select: false
     },
+
     role: {
         type: String,
         enum: ['user', 'ca', 'admin'],
         default: 'user'
     },
+
     userType: {
         type: String,
         enum: ['gig-worker', 'contractor', 'trades', 'business-owner', 'student', 'employee', 'other'],
         required: true
     },
+
     profileImage: {
         type: String,
         default: 'default-avatar.png'
     },
+
     phoneNumber: {
         type: String,
         match: [/^\+?1?\d{10,14}$/, 'Please enter a valid phone number']
     },
+
     address: {
         street: String,
         city: String,
@@ -138,6 +173,7 @@ const userSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
+
     provincialTaxNumber: {
         type: String,
         validate: {
@@ -190,6 +226,130 @@ const userSchema = new mongoose.Schema({
         default: false
     },
 
+    // Onboarding / tax profile fields
+    employmentProfiles: {
+        type: [String],
+        default: []
+    },
+
+    familyStatus: {
+        type: String,
+        default: ''
+    },
+
+    numberOfDependents: {
+        type: Number,
+        default: 0,
+        min: 0
+    },
+
+    spouse: {
+        name: {
+            type: String,
+            default: ''
+        },
+        dob: {
+            type: String,
+            default: ''
+        },
+        sin: {
+            type: String,
+            default: ''
+        },
+        phone: {
+            type: String,
+            default: ''
+        },
+        gigPlatforms: {
+            type: [String],
+            default: []
+        },
+        additionalIncomeSources: {
+            type: [String],
+            default: []
+        }
+    },
+
+    incomeDetails: {
+        employerName: {
+            type: String,
+            default: ''
+        },
+        t4Income: {
+            type: String,
+            default: ''
+        },
+        gigPlatforms: {
+            type: [String],
+            default: []
+        },
+        gigPlatformOther: {
+            type: String,
+            default: ''
+        },
+        gigIncome: {
+            type: String,
+            default: ''
+        },
+        selfEmploymentIncome: {
+            type: String,
+            default: ''
+        },
+        businessIncome: {
+            type: String,
+            default: ''
+        },
+        additionalIncomeSources: {
+            type: [String],
+            default: []
+        }
+    },
+
+    deductions: {
+        type: mongoose.Schema.Types.Mixed,
+        default: {}
+    },
+
+    receiptTypes: {
+        type: mongoose.Schema.Types.Mixed,
+        default: {}
+    },
+
+    vehiclePurchasedForWork: {
+        type: Boolean,
+        default: false
+    },
+
+    vehicles: {
+        type: [vehicleSchema],
+        default: []
+    },
+
+    agreeToTerms: {
+        type: Boolean,
+        default: false
+    },
+
+    agreeToPrivacy: {
+        type: Boolean,
+        default: false
+    },
+
+    confirmAccuracy: {
+        type: Boolean,
+        default: false
+    },
+
+    onboardingCompleted: {
+        type: Boolean,
+        default: false
+    },
+
+    onboardingCompletedAt: {
+        type: Date,
+        default: null
+    },
+
     subscription: {
         plan: {
             type: String,
@@ -206,6 +366,7 @@ const userSchema = new mongoose.Schema({
         stripeCustomerId: String,
         stripeSubscriptionId: String
     },
+
     taxYears: [{
         year: {
             type: Number,
@@ -219,42 +380,53 @@ const userSchema = new mongoose.Schema({
         filedDate: Date,
         filedWith: String
     }],
+
     mfaEnabled: {
         type: Boolean,
         default: false
     },
+
     mfaSecret: {
         type: String,
         select: false
     },
+
     mfaBackupCodes: [{
         code: String,
         used: { type: Boolean, default: false }
     }],
+
     lastLogin: Date,
+
     loginAttempts: {
         type: Number,
         default: 0
     },
+
     lockUntil: Date,
+
     passwordChangedAt: Date,
     passwordResetToken: String,
     passwordResetExpires: Date,
     emailVerificationToken: String,
+
     emailVerified: {
         type: Boolean,
         default: false
     },
+
     notificationPreferences: {
         email: { type: Boolean, default: true },
         push: { type: Boolean, default: true },
         sms: { type: Boolean, default: false },
         reminders: { type: Boolean, default: true }
     },
+
     createdAt: {
         type: Date,
         default: Date.now
     },
+
     updatedAt: {
         type: Date,
         default: Date.now

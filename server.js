@@ -26,6 +26,7 @@ const documentRequestRoutes = require('./routes/documentRequest.routes');
 const taxCaseTimelineRoutes = require('./routes/taxCaseTimeline.routes');
 const taxCaseNoteRoutes = require('./routes/taxCaseNote.routes');
 const notificationRoutes = require('./routes/notification.routes');
+const onboardingRoutes = require('./routes/onboarding.routes');
 
 const app = express();
 
@@ -110,6 +111,7 @@ app.use('/api/tax-cases', taxCaseRoutes);
 app.use('/api/tax-case-timeline', taxCaseTimelineRoutes);
 app.use('/api/tax-case-notes', taxCaseNoteRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/onboarding', onboardingRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
