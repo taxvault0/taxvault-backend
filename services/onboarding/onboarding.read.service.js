@@ -1,0 +1,23 @@
+const UserProfile = require('../../models/UserProfile');
+const User = require('../../models/User');
+
+async function getOnboardingProfile(userId) {
+  const profile = await UserProfile.findOne({ user: userId })
+    .populate('address')
+    .populate('spouse')
+    .populate('employmentProfile')
+    .populate('additionalIncomes')
+    .populate('deductions')
+    .populate('receiptTypes')
+    .populate('vehicles');
+
+  if (!profile) {
+    return null;
+  }
+
+  return profile;
+}
+
+module.exports = {
+  getOnboardingProfile,
+};
