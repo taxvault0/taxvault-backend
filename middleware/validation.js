@@ -100,8 +100,18 @@ const receiptValidators = {
             .isMongoId().withMessage('Invalid receipt ID'),
         body('category')
             .optional()
-            .isIn(['fuel', 'vehicle-maintenance', 'insurance', 'office-supplies', 'internet', 'rent', 'utilities', 'meals', 'software', 'other'])
-            .withMessage('Invalid category'),
+            .isIn([
+                'fuel',
+                'vehicle-maintenance',
+                'insurance',
+                'office-supplies',
+                'internet',
+                'rent',
+                'utilities',
+                'meals',
+                'software',
+                'other'
+            ]).withMessage('Invalid category'),
         body('amount')
             .optional()
             .isFloat({ min: 0.01 }).withMessage('Amount must be greater than 0')
@@ -192,11 +202,182 @@ const commonValidators = {
     ]
 };
 
+const caRegistrationValidators = {
+    saveDraft: [
+        body('accountInformation.firstName')
+            .optional()
+            .isLength({ min: 1, max: 50 }).withMessage('First name must be between 1 and 50 characters')
+            .trim(),
+
+        body('accountInformation.lastName')
+            .optional()
+            .isLength({ min: 1, max: 50 }).withMessage('Last name must be between 1 and 50 characters')
+            .trim(),
+
+        body('accountInformation.email')
+            .optional()
+            .isEmail().withMessage('Please provide a valid email')
+            .normalizeEmail({
+                gmail_remove_dots: false
+            })
+            .toLowerCase(),
+
+        body('accountInformation.primaryPhone')
+            .optional()
+            .matches(/^\+?1?\d{10,14}$/).withMessage('Please provide a valid phone number'),
+
+        body('professionalInformation.caDesignation')
+            .optional()
+            .isIn([
+                'Chartered Professional Accountant (CPA)',
+                'CPA, CA',
+                'CPA, CGA',
+                'CPA, CMA',
+                'Other'
+            ]).withMessage('Invalid CA designation'),
+
+        body('professionalInformation.caNumber')
+            .optional()
+            .isLength({ min: 1, max: 100 }).withMessage('CA number is required')
+            .trim(),
+
+        body('professionalInformation.provinceOfRegistration')
+            .optional()
+            .isIn(['AB', 'BC', 'MB', 'NB', 'NL', 'NS', 'NT', 'NU', 'ON', 'PE', 'QC', 'SK', 'YT'])
+            .withMessage('Invalid province of registration'),
+
+        body('professionalInformation.yearAdmitted')
+            .optional()
+            .isInt({ min: 1900, max: 2100 }).withMessage('Invalid year admitted')
+            .toInt(),
+
+        body('professionalInformation.yearsOfExperience')
+            .optional()
+            .isInt({ min: 0, max: 100 }).withMessage('Years of experience must be between 0 and 100')
+            .toInt(),
+
+        body('professionalInformation.firmName')
+            .optional()
+            .isLength({ min: 1, max: 200 }).withMessage('Firm name is required')
+            .trim(),
+
+        body('professionalInformation.firmWebsite')
+            .optional({ checkFalsy: true })
+            .isURL().withMessage('Firm website must be a valid URL'),
+
+        body('firmDetails.firmAddress')
+            .optional()
+            .isLength({ min: 1, max: 300 }).withMessage('Firm address is required')
+            .trim(),
+
+        body('firmDetails.city')
+            .optional()
+            .isLength({ min: 1, max: 100 }).withMessage('City is required')
+            .trim(),
+
+        body('firmDetails.province')
+            .optional()
+            .isIn(['AB', 'BC', 'MB', 'NB', 'NL', 'NS', 'NT', 'NU', 'ON', 'PE', 'QC', 'SK', 'YT'])
+            .withMessage('Invalid province'),
+
+        body('firmDetails.postalCode')
+            .optional()
+            .isLength({ min: 3, max: 20 }).withMessage('Postal code is required')
+            .trim(),
+
+        body('firmDetails.firmPhone')
+            .optional()
+            .matches(/^\+?1?\d{10,14}$/).withMessage('Please provide a valid firm phone number'),
+
+        body('firmDetails.firmEmail')
+            .optional()
+            .isEmail().withMessage('Please provide a valid firm email')
+            .normalizeEmail({
+                gmail_remove_dots: false
+            })
+            .toLowerCase(),
+
+        body('firmDetails.numberOfPartners')
+            .optional()
+            .isInt({ min: 0 }).withMessage('Number of partners must be 0 or more')
+            .toInt(),
+
+        body('firmDetails.numberOfStaff')
+            .optional()
+            .isInt({ min: 0 }).withMessage('Number of staff must be 0 or more')
+            .toInt(),
+
+        body('firmDetails.yearEstablished')
+            .optional({ nullable: true })
+            .isInt({ min: 1900, max: 2100 }).withMessage('Invalid year established')
+            .toInt(),
+
+        body('practiceInformation.averageClientsPerYear')
+            .optional()
+            .isInt({ min: 0 }).withMessage('Average clients per year must be 0 or more')
+            .toInt(),
+
+        body('practiceInformation.minimumFee')
+            .optional()
+            .isFloat({ min: 0 }).withMessage('Minimum fee must be 0 or more')
+            .toFloat(),
+
+        body('practiceInformation.maximumFee')
+            .optional()
+            .isFloat({ min: 0 }).withMessage('Maximum fee must be 0 or more')
+            .toFloat(),
+
+        body('practiceInformation.serviceRadiusKm')
+            .optional()
+            .isFloat({ min: 0 }).withMessage('Service radius must be 0 or more')
+            .toFloat(),
+
+        body('verificationAndDocuments.professionalReferences')
+            .optional()
+            .isArray().withMessage('Professional references must be an array'),
+
+        body('reviewAndSubmit.agreedTermsAndConditions')
+            .optional()
+            .isBoolean().withMessage('agreedTermsAndConditions must be boolean'),
+
+        body('reviewAndSubmit.agreedPrivacyPolicy')
+            .optional()
+            .isBoolean().withMessage('agreedPrivacyPolicy must be boolean'),
+
+        body('reviewAndSubmit.agreedProfessionalTerms')
+            .optional()
+            .isBoolean().withMessage('agreedProfessionalTerms must be boolean'),
+
+        body('reviewAndSubmit.confirmAccuracy')
+            .optional()
+            .isBoolean().withMessage('confirmAccuracy must be boolean')
+    ],
+
+    submit: [
+        body('reviewAndSubmit.agreedTermsAndConditions')
+            .optional()
+            .isBoolean().withMessage('agreedTermsAndConditions must be boolean'),
+
+        body('reviewAndSubmit.agreedPrivacyPolicy')
+            .optional()
+            .isBoolean().withMessage('agreedPrivacyPolicy must be boolean'),
+
+        body('reviewAndSubmit.agreedProfessionalTerms')
+            .optional()
+            .isBoolean().withMessage('agreedProfessionalTerms must be boolean'),
+
+        body('reviewAndSubmit.confirmAccuracy')
+            .optional()
+            .isBoolean().withMessage('confirmAccuracy must be boolean')
+    ]
+};
+
 module.exports = {
     validate,
     authValidators,
     receiptValidators,
     mileageValidators,
     caAccessValidators,
-    commonValidators
+    commonValidators,
+    caRegistrationValidators
 };

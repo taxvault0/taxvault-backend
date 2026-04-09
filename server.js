@@ -27,6 +27,7 @@ const taxCaseTimelineRoutes = require('./routes/taxCaseTimeline.routes');
 const taxCaseNoteRoutes = require('./routes/taxCaseNote.routes');
 const notificationRoutes = require('./routes/notification.routes');
 const onboardingRoutes = require('./routes/onboarding.routes');
+const caRegistrationRoutes = require('./routes/caRegistration.routes');
 
 const app = express();
 
@@ -84,6 +85,17 @@ app.use('/api', limiter);
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+// Debug middleware for CA registration requests
+app.use('/api/ca-registration', (req, res, next) => {
+  console.log('---------------- CA REG REQUEST ----------------');
+  console.log('METHOD:', req.method);
+  console.log('URL:', req.originalUrl);
+  console.log('CONTENT-TYPE:', req.headers['content-type']);
+  console.log('BODY:', JSON.stringify(req.body, null, 2));
+  console.log('------------------------------------------------');
+  next();
+});
+
 // Sanitizers / protections
 app.use(mongoSanitize());
 app.use(xss());
@@ -112,6 +124,7 @@ app.use('/api/tax-case-timeline', taxCaseTimelineRoutes);
 app.use('/api/tax-case-notes', taxCaseNoteRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/onboarding', onboardingRoutes);
+app.use('/api/ca-registration', caRegistrationRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
