@@ -11,29 +11,27 @@ const path = require('path');
 require('dotenv').config();
 
 // Import routes
-const authRoutes = require('./routes/auth.routes');
-const userRoutes = require('./routes/user.routes');
-const receiptRoutes = require('./routes/receipt.routes');
-const documentRoutes = require('./routes/document.routes');
-const mileageRoutes = require('./routes/mileage.routes');
-const caRoutes = require('./routes/ca.routes');
-const reportRoutes = require('./routes/report.routes');
-const subscriptionRoutes = require('./routes/subscription.routes');
-const taxRoutes = require('./routes/tax.routes');
-const taxCaseRoutes = require('./routes/taxCase.routes');
-const clientPortalRoutes = require('./routes/clientPortal.routes');
-const documentRequestRoutes = require('./routes/documentRequest.routes');
-const taxCaseTimelineRoutes = require('./routes/taxCaseTimeline.routes');
-const taxCaseNoteRoutes = require('./routes/taxCaseNote.routes');
-const notificationRoutes = require('./routes/notification.routes');
-const onboardingRoutes = require('./routes/onboarding.routes');
-const caRegistrationRoutes = require('./routes/caRegistration.routes');
+const authRoutes = require('./src/modules/auth/auth.routes');
+const userRoutes = require('./src/modules/user/user.routes');
+const receiptRoutes = require('./src/modules/tax/receipt.routes');
+const documentRoutes = require('./src/modules/documents/document.routes');
+const mileageRoutes = require('./src/modules/tax/mileage.routes');
+const caRoutes = require('./src/modules/ca/ca.routes');
+const reportRoutes = require('./src/modules/tax/report.routes');
+const subscriptionRoutes = require('./src/modules/user/subscription.routes');
+const taxRoutes = require('./src/modules/tax/tax.routes');
+const taxCaseRoutes = require('./src/modules/tax/taxCase.routes');
+const clientPortalRoutes = require('./src/modules/tax/clientPortal.routes');
+const documentRequestRoutes = require('./src/modules/documents/document-request.routes');
+const taxCaseTimelineRoutes = require('./src/modules/tax/taxCaseTimeline.routes');
+const taxCaseNoteRoutes = require('./src/modules/tax/taxCaseNote.routes');
+const notificationRoutes = require('./src/modules/notifications/notification.routes');
+const onboardingRoutes = require('./src/modules/onboarding/onboarding.routes');
+const caRegistrationRoutes = require('./src/modules/ca/ca-registration.routes');
 
 const app = express();
 
 // Connect to MongoDB
-console.log('MONGO_URI:', process.env.MONGO_URI);
-
 mongoose
   .connect(process.env.MONGO_URI)
   .then(() => console.log('✅ MongoDB connected successfully'))
@@ -42,41 +40,47 @@ mongoose
     process.exit(1);
   });
 
+// Trust proxy if deployed behind Render / Nginx / proxy
+app.set('trust proxy', 1);
+
 // Security headers
 app.use(
   helmet({
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: false
   })
 );
 
 // CORS setup
 const allowedOrigins = [
   process.env.FRONTEND_URL,
-  process.env.MOBILE_APP_URL,
+  process.env.MOBILE_APP_URL
 ].filter(Boolean);
 
-app.use(
-  cors({
-    origin(origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
+const corsOptions = {
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
 
-      return callback(new Error(`CORS blocked for origin: ${origin}`));
-    },
-    credentials: true,
-    optionsSuccessStatus: 200,
-  })
-);
+    return callback(new Error(`CORS blocked for origin: ${origin}`));
+  },
+  credentials: true,
+  optionsSuccessStatus: 200
+};
 
-// Optional: handle preflight explicitly
-app.options('*', cors());
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 // Rate limiting
 const limiter = rateLimit({
   windowMs: Number(process.env.RATE_LIMIT_WINDOW || 15) * 60 * 1000,
   max: Number(process.env.RATE_LIMIT_MAX || 100),
-  message: 'Too many requests from this IP, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: 'Too many requests from this IP, please try again later.'
+  }
 });
 
 app.use('/api', limiter);
@@ -84,17 +88,6 @@ app.use('/api', limiter);
 // Body parsers
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-
-// Debug middleware for CA registration requests
-app.use('/api/ca-registration', (req, res, next) => {
-  console.log('---------------- CA REG REQUEST ----------------');
-  console.log('METHOD:', req.method);
-  console.log('URL:', req.originalUrl);
-  console.log('CONTENT-TYPE:', req.headers['content-type']);
-  console.log('BODY:', JSON.stringify(req.body, null, 2));
-  console.log('------------------------------------------------');
-  next();
-});
 
 // Sanitizers / protections
 app.use(mongoSanitize());
@@ -106,6 +99,19 @@ app.use(morgan(process.env.NODE_ENV === 'development' ? 'dev' : 'combined'));
 
 // Static uploads
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Optional debug middleware for CA registration requests
+if (process.env.NODE_ENV === 'development') {
+  app.use('/api/ca-registration', (req, res, next) => {
+    console.log('---------------- CA REG REQUEST ----------------');
+    console.log('METHOD:', req.method);
+    console.log('URL:', req.originalUrl);
+    console.log('CONTENT-TYPE:', req.headers['content-type']);
+    console.log('BODY:', JSON.stringify(req.body, null, 2));
+    console.log('------------------------------------------------');
+    next();
+  });
+}
 
 // API routes
 app.use('/api/auth', authRoutes);
@@ -132,7 +138,7 @@ app.get('/health', (req, res) => {
     status: 'OK',
     timestamp: new Date(),
     environment: process.env.NODE_ENV,
-    version: '1.0.0',
+    version: '1.0.0'
   });
 });
 
@@ -140,7 +146,7 @@ app.get('/health', (req, res) => {
 app.use((req, res) => {
   res.status(404).json({
     success: false,
-    message: 'Route not found',
+    message: 'Route not found'
   });
 });
 
@@ -154,7 +160,7 @@ app.use((err, req, res, next) => {
   res.status(statusCode).json({
     success: false,
     message,
-    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
   });
 });
 
