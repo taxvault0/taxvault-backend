@@ -27,7 +27,7 @@ const taxCaseTimelineRoutes = require('./src/modules/tax/taxCaseTimeline.routes'
 const taxCaseNoteRoutes = require('./src/modules/tax/taxCaseNote.routes');
 const notificationRoutes = require('./src/modules/notifications/notification.routes');
 const onboardingRoutes = require('./src/modules/onboarding/onboarding.routes');
-const caRegistrationRoutes = require('./src/modules/ca/caRegistration.routes');
+const caRegistrationRoutes = require('./src/modules/ca/ca-registration.routes');
 
 const app = express();
 
