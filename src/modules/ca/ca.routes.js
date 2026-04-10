@@ -6,39 +6,16 @@ const caController = require('./ca.controller');
 const caDirectoryController = require('./ca-directory.controller');
 const caCaseController = require('./ca-case.controller');
 
-// =====================
 // Public routes
-// =====================
 router.get('/search', caDirectoryController.searchCAs);
 router.get('/profile/:id', caDirectoryController.getCAProfile);
 
-// =====================
-// CA-only routes
-// =====================
-router.post(
-  '/profile',
-  protect,
-  authorize('ca'),
-  caController.createOrUpdateProfile
-);
+// CA profile routes
+router.post('/profile', protect, authorize('ca'), caController.createOrUpdateProfile);
+router.put('/toggle-status', protect, authorize('ca'), caController.toggleAcceptingStatus);
+router.get('/dashboard/stats', protect, authorize('ca'), caController.getCADashboardStats);
 
-router.put(
-  '/toggle-status',
-  protect,
-  authorize('ca'),
-  caController.toggleAcceptingStatus
-);
-
-router.get(
-  '/dashboard/stats',
-  protect,
-  authorize('ca'),
-  caController.getCADashboardStats
-);
-
-// =====================
-// CA Case Workflow routes
-// =====================
+// CA case workflow routes
 router.get(
   '/assigned-clients',
   protect,
@@ -60,11 +37,8 @@ router.get(
   caCaseController.getPendingReviewQueue
 );
 
-// =====================
-// User to CA connection
-// =====================
+// User ↔ CA connection routes
 router.post('/connect', protect, caController.requestConnection);
-
 router.patch(
   '/connections/:connectionId/respond',
   protect,
