@@ -72,7 +72,7 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Name is required'],
       trim: true,
-      maxlength: [50, 'Name cannot exceed 50 characters']
+      maxlength: [120, 'Name cannot exceed 120 characters']
     },
 
     email: {
@@ -81,10 +81,7 @@ const userSchema = new mongoose.Schema(
       unique: true,
       lowercase: true,
       trim: true,
-      match: [
-        /^\S+@\S+\.\S+$/,
-        'Please enter a valid email'
-      ]
+      match: [/^\S+@\S+\.\S+$/, 'Please enter a valid email']
     },
 
     password: {
@@ -134,9 +131,11 @@ const userSchema = new mongoose.Schema(
         'business-owner',
         'student',
         'employee',
-        'other'
+        'other',
+        'professional'
       ],
-      required: true
+      required: false,
+      default: 'other'
     },
 
     profileImage: {
@@ -158,25 +157,49 @@ const userSchema = new mongoose.Schema(
 
     province: {
       type: String,
-      enum: [
-        'AB',
-        'BC',
-        'MB',
-        'NB',
-        'NL',
-        'NS',
-        'NT',
-        'NU',
-        'ON',
-        'PE',
-        'QC',
-        'SK',
-        'YT'
-      ],
-      required: [true, 'Province is required for tax calculations'],
+      enum: ['AB', 'BC', 'MB', 'NB', 'NL', 'NS', 'NT', 'NU', 'ON', 'PE', 'QC', 'SK', 'YT'],
+      required: false,
       default: 'ON',
       uppercase: true,
       trim: true
+    },
+
+    firmName: {
+      type: String,
+      trim: true,
+      default: ''
+    },
+
+    caNumber: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      default: ''
+    },
+
+    termsAccepted: {
+      type: Boolean,
+      default: false
+    },
+
+    privacyAccepted: {
+      type: Boolean,
+      default: false
+    },
+
+    professionalTermsAccepted: {
+      type: Boolean,
+      default: false
+    },
+
+    termsAcceptedAt: {
+      type: Date,
+      default: null
+    },
+
+    profile: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {}
     },
 
     provincialTaxRegistered: {
@@ -332,7 +355,7 @@ const userSchema = new mongoose.Schema(
 
 userSchema.index({ role: 1 });
 
-userSchema.virtual('profile', {
+userSchema.virtual('profileRef', {
   ref: 'UserProfile',
   localField: '_id',
   foreignField: 'user',
@@ -404,9 +427,7 @@ userSchema.virtual('filingDeadline').get(function () {
   const deadlines =
     FILING_DEADLINES[this.province] || FILING_DEADLINES.default;
 
-  const frequency = ['monthly', 'quarterly', 'annual'].includes(
-    this.filingFrequency
-  )
+  const frequency = ['monthly', 'quarterly', 'annual'].includes(this.filingFrequency)
     ? this.filingFrequency
     : 'quarterly';
 
@@ -491,9 +512,7 @@ userSchema.methods.needsProvincialTaxRegistration = function () {
 userSchema.methods.getFilingRequirements = function () {
   const separateProvinces = ['BC', 'SK', 'MB', 'QC'];
 
-  const frequency = ['monthly', 'quarterly', 'annual'].includes(
-    this.filingFrequency
-  )
+  const frequency = ['monthly', 'quarterly', 'annual'].includes(this.filingFrequency)
     ? this.filingFrequency
     : 'quarterly';
 

@@ -3,14 +3,14 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const User = require('./user.model');
 const { protect } = require('../../shared/middleware/auth.middleware');
-const { validate, authValidators, commonValidators } = require('../../shared/middleware/validation.middleware');
+const { validate, authValidators } = require('../../shared/middleware/validation.middleware');
 const { sendWelcomeEmail, sendPasswordResetEmail } = require('../../infrastructure/email/email.service');
 const { body, validationResult, param } = require('express-validator');
 const crypto = require('crypto');
 const speakeasy = require('speakeasy');
 const QRCode = require('qrcode');
 
-// Import tax utilities (create this file later)
+// Import tax utilities
 const taxUtils = require('../../shared/utils/tax-utils');
 
 const STRONG_PASSWORD_REGEX =
@@ -37,9 +37,17 @@ router.post('/register', validate(authValidators.register), async (req, res) => 
       name,
       email,
       password,
+      role,
       userType,
       phoneNumber,
       province,
+      firmName,
+      caNumber,
+      profile,
+      termsAccepted,
+      privacyAccepted,
+      professionalTermsAccepted,
+      termsAcceptedAt,
       businessNumber,
       provincialTaxRegistered,
       provincialTaxNumber,
@@ -48,8 +56,12 @@ router.post('/register', validate(authValidators.register), async (req, res) => 
       exceededProvincialThreshold
     } = req.body;
 
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const normalizedRole = role || 'user';
+    const normalizedProvince = province ? String(province).trim().toUpperCase() : 'ON';
+
     // Check if user exists
-    const existingUser = await User.findOne({ email });
+    const existingUser = await User.findOne({ email: normalizedEmail });
     if (existingUser) {
       return res.status(400).json({
         success: false,
@@ -58,7 +70,7 @@ router.post('/register', validate(authValidators.register), async (req, res) => 
     }
 
     // Validate province if provided
-    if (province && !VALID_PROVINCES.includes(province)) {
+    if (normalizedProvince && !VALID_PROVINCES.includes(normalizedProvince)) {
       return res.status(400).json({
         success: false,
         message: 'Invalid province selected'
@@ -66,34 +78,50 @@ router.post('/register', validate(authValidators.register), async (req, res) => 
     }
 
     // Validate business number format based on province
-    if (businessNumber && province) {
-      const isValid = taxUtils.validateBusinessNumber(businessNumber, province);
+    if (businessNumber && normalizedProvince) {
+      const isValid = taxUtils.validateBusinessNumber(businessNumber, normalizedProvince);
       if (!isValid) {
         return res.status(400).json({
           success: false,
-          message: `Invalid business number format for ${province}`
+          message: `Invalid business number format for ${normalizedProvince}`
         });
       }
     }
 
+    const safeUserType =
+      userType ||
+      (normalizedRole === 'ca' ? 'professional' : 'other');
+
     // Create user with all fields
     const userData = {
-      name,
-      email,
+      name: String(name).trim(),
+      email: normalizedEmail,
       password,
-      userType,
+      role: normalizedRole,
+      userType: safeUserType,
       phoneNumber,
+      province: normalizedProvince,
+      firmName: firmName || '',
+      caNumber: caNumber || '',
+      termsAccepted: !!termsAccepted,
+      privacyAccepted: !!privacyAccepted,
+      professionalTermsAccepted: !!professionalTermsAccepted,
+      termsAcceptedAt: termsAcceptedAt || null,
+      profile: profile && typeof profile === 'object' ? profile : {},
       emailVerified: false
     };
 
-    // Add optional fields if provided
-    if (province) userData.province = province;
+    // Add optional tax fields if provided
     if (businessNumber) userData.businessNumber = businessNumber;
-    if (provincialTaxRegistered !== undefined) userData.provincialTaxRegistered = provincialTaxRegistered;
+    if (provincialTaxRegistered !== undefined) {
+      userData.provincialTaxRegistered = provincialTaxRegistered;
+    }
     if (provincialTaxNumber) userData.provincialTaxNumber = provincialTaxNumber;
     if (filingFrequency) userData.filingFrequency = filingFrequency;
     if (taxRegistrationDate) userData.taxRegistrationDate = taxRegistrationDate;
-    if (exceededProvincialThreshold !== undefined) userData.exceededProvincialThreshold = exceededProvincialThreshold;
+    if (exceededProvincialThreshold !== undefined) {
+      userData.exceededProvincialThreshold = exceededProvincialThreshold;
+    }
 
     const user = await User.create(userData);
 
@@ -101,7 +129,7 @@ router.post('/register', validate(authValidators.register), async (req, res) => 
     const verificationToken = user.createEmailVerificationToken();
     await user.save({ validateBeforeSave: false });
 
-    // Send welcome email safely (do not break registration if email fails)
+    // Send welcome email safely
     try {
       await sendWelcomeEmail(user);
     } catch (emailError) {
@@ -128,12 +156,21 @@ router.post('/register', validate(authValidators.register), async (req, res) => 
       token,
       user: {
         id: user._id,
+        _id: user._id,
         name: user.name,
         email: user.email,
         role: user.role,
         userType: user.userType,
-        emailVerified: user.emailVerified,
+        phoneNumber: user.phoneNumber || '',
         province: user.province,
+        firmName: user.firmName || '',
+        caNumber: user.caNumber || '',
+        profile: user.profile || {},
+        termsAccepted: !!user.termsAccepted,
+        privacyAccepted: !!user.privacyAccepted,
+        professionalTermsAccepted: !!user.professionalTermsAccepted,
+        termsAcceptedAt: user.termsAcceptedAt || null,
+        emailVerified: user.emailVerified,
         businessNumber: user.businessNumber,
         provincialTaxRegistered: user.provincialTaxRegistered,
         provincialTaxNumber: user.provincialTaxNumber,
@@ -143,6 +180,18 @@ router.post('/register', validate(authValidators.register), async (req, res) => 
     });
   } catch (error) {
     console.error('Registration error:', error);
+
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: Object.values(error.errors).map((err) => ({
+          field: err.path,
+          message: err.message
+        }))
+      });
+    }
+
     res.status(500).json({
       success: false,
       message: 'Error creating user',
@@ -166,6 +215,10 @@ router.put('/profile', protect, async (req, res) => {
       });
     }
 
+    if (updates.province) {
+      updates.province = String(updates.province).trim().toUpperCase();
+    }
+
     // Validate province if being updated
     if (updates.province && !VALID_PROVINCES.includes(updates.province)) {
       return res.status(400).json({
@@ -176,24 +229,31 @@ router.put('/profile', protect, async (req, res) => {
 
     // Validate business number if being updated
     if (updates.businessNumber && (updates.province || user.province)) {
-      const province = updates.province || user.province;
-      const isValid = taxUtils.validateBusinessNumber(updates.businessNumber, province);
+      const provinceToUse = updates.province || user.province;
+      const isValid = taxUtils.validateBusinessNumber(updates.businessNumber, provinceToUse);
       if (!isValid) {
         return res.status(400).json({
           success: false,
-          message: `Invalid business number format for ${province}`
+          message: `Invalid business number format for ${provinceToUse}`
         });
       }
     }
 
-    // Update allowed fields
     const allowedUpdates = [
-      'name', 'phoneNumber', 'province', 'businessNumber',
-      'provincialTaxRegistered', 'provincialTaxNumber',
-      'filingFrequency', 'exceededProvincialThreshold'
+      'name',
+      'phoneNumber',
+      'province',
+      'businessNumber',
+      'provincialTaxRegistered',
+      'provincialTaxNumber',
+      'filingFrequency',
+      'exceededProvincialThreshold',
+      'firmName',
+      'caNumber',
+      'profile'
     ];
 
-    allowedUpdates.forEach(field => {
+    allowedUpdates.forEach((field) => {
       if (updates[field] !== undefined) {
         user[field] = updates[field];
       }
@@ -201,7 +261,6 @@ router.put('/profile', protect, async (req, res) => {
 
     await user.save();
 
-    // Get updated tax info
     let taxInfo = {};
     if (user.province) {
       taxInfo = {
@@ -223,6 +282,9 @@ router.put('/profile', protect, async (req, res) => {
         userType: user.userType,
         phoneNumber: user.phoneNumber,
         province: user.province,
+        firmName: user.firmName || '',
+        caNumber: user.caNumber || '',
+        profile: user.profile || {},
         businessNumber: user.businessNumber,
         provincialTaxRegistered: user.provincialTaxRegistered,
         provincialTaxNumber: user.provincialTaxNumber,
@@ -286,7 +348,8 @@ router.post('/login', validate(authValidators.login), async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const user = await User.findOne({ email }).select('+password +loginAttempts +lockUntil +mfaEnabled +mfaSecret');
+    const user = await User.findOne({ email: String(email).toLowerCase() })
+      .select('+password +loginAttempts +lockUntil +mfaEnabled +mfaSecret');
 
     if (!user) {
       return res.status(401).json({
@@ -355,6 +418,9 @@ router.post('/login', validate(authValidators.login), async (req, res) => {
         userType: user.userType,
         mfaEnabled: user.mfaEnabled,
         province: user.province,
+        firmName: user.firmName || '',
+        caNumber: user.caNumber || '',
+        profile: user.profile || {},
         businessNumber: user.businessNumber,
         provincialTaxRegistered: user.provincialTaxRegistered,
         filingFrequency: user.filingFrequency,
@@ -388,7 +454,7 @@ router.post('/verify-mfa', validate(authValidators.verifyMfa), async (req, res) 
 
     if (user.mfaBackupCodes && user.mfaBackupCodes.length > 0) {
       const backupCode = user.mfaBackupCodes.find(
-        code => code.code === token && !code.used
+        (code) => code.code === token && !code.used
       );
 
       if (backupCode) {
@@ -474,7 +540,7 @@ router.post('/setup-mfa', protect, async (req, res) => {
       success: true,
       secret: secret.base32,
       qrCode,
-      backupCodes: backupCodes.map(c => c.code)
+      backupCodes: backupCodes.map((c) => c.code)
     });
   } catch (error) {
     console.error('MFA setup error:', error);

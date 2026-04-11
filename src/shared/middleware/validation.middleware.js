@@ -30,14 +30,12 @@ const authValidators = {
   register: [
     body('name')
       .notEmpty().withMessage('Name is required')
-      .isLength({ min: 2, max: 50 }).withMessage('Name must be between 2 and 50 characters')
+      .isLength({ min: 2, max: 120 }).withMessage('Name must be between 2 and 120 characters')
       .trim(),
 
     body('email')
       .isEmail().withMessage('Please provide a valid email')
-      .normalizeEmail({
-        gmail_remove_dots: false
-      })
+      .normalizeEmail({ gmail_remove_dots: false })
       .toLowerCase(),
 
     body('password')
@@ -49,8 +47,23 @@ const authValidators = {
       .matches(/\s/)
       .withMessage('Password cannot contain spaces'),
 
+    body('role')
+      .optional()
+      .isIn(['user', 'ca', 'admin'])
+      .withMessage('Invalid role'),
+
     body('userType')
-      .isIn(['gig-worker', 'contractor', 'trades', 'business-owner', 'student', 'employee', 'other'])
+      .optional({ values: 'falsy' })
+      .isIn([
+        'gig-worker',
+        'contractor',
+        'trades',
+        'business-owner',
+        'student',
+        'employee',
+        'other',
+        'professional'
+      ])
       .withMessage('Invalid user type'),
 
     body('phoneNumber')
@@ -65,6 +78,43 @@ const authValidators = {
       .isIn(PROVINCES)
       .withMessage('Invalid province'),
 
+    body('firmName')
+      .optional({ values: 'falsy' })
+      .isLength({ min: 1, max: 200 })
+      .withMessage('Firm name must be between 1 and 200 characters')
+      .trim(),
+
+    body('caNumber')
+      .optional({ values: 'falsy' })
+      .customSanitizer((value) => String(value).trim().toUpperCase())
+      .isLength({ min: 3, max: 30 })
+      .withMessage('CA number must be between 3 and 30 characters'),
+
+    body('termsAccepted')
+      .optional()
+      .isBoolean()
+      .withMessage('termsAccepted must be boolean'),
+
+    body('privacyAccepted')
+      .optional()
+      .isBoolean()
+      .withMessage('privacyAccepted must be boolean'),
+
+    body('professionalTermsAccepted')
+      .optional()
+      .isBoolean()
+      .withMessage('professionalTermsAccepted must be boolean'),
+
+    body('termsAcceptedAt')
+      .optional({ values: 'falsy' })
+      .isISO8601()
+      .withMessage('termsAcceptedAt must be a valid ISO date'),
+
+    body('profile')
+      .optional()
+      .isObject()
+      .withMessage('profile must be an object'),
+
     body('filingFrequency')
       .optional({ checkFalsy: true })
       .isIn(['monthly', 'quarterly', 'annual', 'unknown'])
@@ -74,9 +124,7 @@ const authValidators = {
   login: [
     body('email')
       .isEmail().withMessage('Please provide a valid email')
-      .normalizeEmail({
-        gmail_remove_dots: false
-      })
+      .normalizeEmail({ gmail_remove_dots: false })
       .toLowerCase(),
 
     body('password')
@@ -207,9 +255,7 @@ const caAccessValidators = {
   invite: [
     body('caEmail')
       .isEmail().withMessage('Please provide a valid CA email')
-      .normalizeEmail({
-        gmail_remove_dots: false
-      })
+      .normalizeEmail({ gmail_remove_dots: false })
       .toLowerCase(),
 
     body('permissionLevel')
@@ -278,9 +324,7 @@ const caRegistrationValidators = {
     body('accountInformation.email')
       .optional()
       .isEmail().withMessage('Please provide a valid email')
-      .normalizeEmail({
-        gmail_remove_dots: false
-      })
+      .normalizeEmail({ gmail_remove_dots: false })
       .toLowerCase(),
 
     body('accountInformation.primaryPhone')
@@ -377,9 +421,7 @@ const caRegistrationValidators = {
     body('firmDetails.firmEmail')
       .optional()
       .isEmail().withMessage('Please provide a valid firm email')
-      .normalizeEmail({
-        gmail_remove_dots: false
-      })
+      .normalizeEmail({ gmail_remove_dots: false })
       .toLowerCase(),
 
     body('firmDetails.numberOfPartners')
