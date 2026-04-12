@@ -1,246 +1,79 @@
-// src/modules/ca/ca.controller.js
-const CAProfile = require('./ca-profile.model');
-const TaxCase = require('../tax/tax-case.model');
+const mongoose = require('mongoose');
 
-const normalizePhone = (v = '') => String(v).replace(/\D/g, '');
+const caProfileSchema = new mongoose.Schema(
+  {
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+      unique: true,
+    },
 
-const normalizeLanguages = (languages = []) => {
-  if (!Array.isArray(languages)) return [];
-  return [...new Set(languages.map((l) => String(l).toLowerCase().trim()))];
-};
+    firmName: { type: String, default: '' },
+    firmLogo: { type: String, default: '' },
 
-exports.createOrUpdateProfile = async (req, res) => {
-  try {
-    const data = req.body || {};
+    yearsOfExperience: { type: Number, default: 0 },
+    otherLanguage: { type: String, default: '' },
 
-    const update = {
-      user: req.user._id,
-      updatedAt: new Date()
-    };
+    licenseNumber: { type: String, default: '' },
+    policyNumber: { type: String, default: '' },
 
-    // Basic fields
-    if (data.firmName !== undefined) update.firmName = data.firmName;
-    if (data.bio !== undefined) update.bio = data.bio;
+    yearAdmitted: { type: Number },
+    peerReviewDate: { type: Date },
 
-    if (data.yearsOfExperience !== undefined) {
-      update.yearsOfExperience = Number(data.yearsOfExperience) || 0;
-    }
+    address: {
+      street: { type: String, default: '' },
+      city: { type: String, default: '' },
+      province: { type: String, default: '' },
+      postalCode: { type: String, default: '' },
+      country: { type: String, default: 'Canada' },
+    },
 
-    // Address
-    if (data.address) {
-      update.address = {
-        street: data.address.street || '',
-        city: data.address.city || '',
-        province: data.address.province || '',
-        postalCode: data.address.postalCode || '',
-        country: data.address.country || 'Canada'
-      };
-    }
+    location: {
+      type: {
+        type: String,
+        enum: ['Point'],
+        default: 'Point',
+      },
+      coordinates: {
+        type: [Number],
+        default: [0, 0],
+      },
+    },
 
-    // Location
-    if (data.location?.coordinates) {
-      update.location = {
-        type: 'Point',
-        coordinates: data.location.coordinates
-      };
-    }
+    serviceRadius: { type: Number, default: 50 },
 
-    if (data.serviceRadius !== undefined) {
-      update.serviceRadius = Number(data.serviceRadius) || 50;
-    }
+    specializations: { type: [String], default: [] },
+    services: { type: [String], default: [] },
+    languages: { type: [String], default: [] },
 
-    // Availability
-    if (data.acceptingNewClients !== undefined) {
-      update.acceptingNewClients = data.acceptingNewClients;
-      update.availabilityStatus = data.acceptingNewClients
-        ? 'active'
-        : 'not-accepting';
-    }
+    phone: { type: String, default: '' },
+    alternatePhone: { type: String, default: '' },
+    firmPhone: { type: String, default: '' },
 
-    if (Array.isArray(data.availableFor)) {
-      update.availableFor = data.availableFor;
-    }
+    website: { type: String, default: '' },
 
-    // Specializations / services
-    if (Array.isArray(data.specializations)) {
-      update.specializations = data.specializations;
-    }
+    hoursOfOperation: { type: Object, default: {} },
 
-    if (Array.isArray(data.services)) {
-      update.services = data.services;
-    }
+    acceptingNewClients: { type: Boolean, default: true },
+    availabilityStatus: {
+      type: String,
+      enum: ['active', 'not-accepting'],
+      default: 'active',
+    },
 
-    // Languages
-    if (data.languages) {
-      update.languages = normalizeLanguages(data.languages);
-    }
+    verified: { type: Boolean, default: false },
+    verifiedAt: { type: Date },
 
-    if (data.otherLanguage !== undefined) {
-      update.otherLanguage = data.otherLanguage;
-    }
+    profileViews: { type: Number, default: 0 },
+    connectionRequests: { type: Number, default: 0 },
 
-    // Contact
-    if (data.phone !== undefined) update.phone = normalizePhone(data.phone);
-    if (data.alternatePhone !== undefined)
-      update.alternatePhone = normalizePhone(data.alternatePhone);
-    if (data.firmPhone !== undefined)
-      update.firmPhone = normalizePhone(data.firmPhone);
+    rating: { type: Number, default: 0 },
+    reviewCount: { type: Number, default: 0 },
+  },
+  { timestamps: true }
+);
 
-    if (data.website !== undefined) update.website = data.website;
-
-    // Professional
-    if (data.licenseNumber !== undefined)
-      update.licenseNumber = data.licenseNumber;
-
-    if (data.policyNumber !== undefined)
-      update.policyNumber = data.policyNumber;
-
-    if (data.yearAdmitted !== undefined) {
-      update.yearAdmitted = Number(data.yearAdmitted);
-    }
-
-    if (data.peerReviewDate !== undefined) {
-      update.peerReviewDate = data.peerReviewDate;
-    }
-
-    // Hours
-    if (data.hoursOfOperation) {
-      update.hoursOfOperation = data.hoursOfOperation;
-    }
-
-    const profile = await CAProfile.findOneAndUpdate(
-      { user: req.user._id },
-      { $set: update },
-      { new: true, upsert: true }
-    ).populate('user', 'name email');
-
-    return res.json({
-      success: true,
-      message: 'Profile saved',
-      profile
-    });
-  } catch (error) {
-    console.error('createOrUpdateProfile error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to save profile'
-    });
-  }
-};
-
-exports.toggleAcceptingStatus = async (req, res) => {
-  try {
-    const profile = await CAProfile.findOne({ user: req.user._id });
-
-    if (!profile) {
-      return res.status(404).json({
-        success: false,
-        message: 'Profile not found'
-      });
-    }
-
-    profile.acceptingNewClients = !profile.acceptingNewClients;
-    profile.availabilityStatus = profile.acceptingNewClients
-      ? 'active'
-      : 'not-accepting';
-
-    await profile.save();
-
-    return res.json({
-      success: true,
-      acceptingNewClients: profile.acceptingNewClients,
-      availabilityStatus: profile.availabilityStatus
-    });
-  } catch (error) {
-    console.error('toggleAcceptingStatus error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to toggle status'
-    });
-  }
-};
-
-exports.getCADashboardStats = async (req, res) => {
-  try {
-    const profile = await CAProfile.findOne({ user: req.user._id }).lean();
-
-    if (!profile) {
-      return res.status(404).json({
-        success: false,
-        message: 'Profile not found'
-      });
-    }
-
-    const [totalCases, activeCases] = await Promise.all([
-      TaxCase.countDocuments({ ca: req.user._id }),
-      TaxCase.countDocuments({
-        ca: req.user._id,
-        status: { $in: ['assigned', 'in-progress'] }
-      })
-    ]);
-
-    return res.json({
-      success: true,
-      stats: {
-        profileViews: profile.profileViews || 0,
-        connectionRequests: profile.connectionRequests || 0,
-        rating: profile.rating || 0,
-        reviewCount: profile.reviewCount || 0,
-        totalCases,
-        activeCases
-      }
-    });
-  } catch (error) {
-    console.error('getCADashboardStats error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to fetch stats'
-    });
-  }
-};
-
-exports.requestConnection = async (req, res) => {
-  try {
-    const { caProfileId } = req.body;
-
-    const profile = await CAProfile.findById(caProfileId);
-
-    if (!profile) {
-      return res.status(404).json({
-        success: false,
-        message: 'CA not found'
-      });
-    }
-
-    // Just increment count (schema only supports counter)
-    profile.connectionRequests += 1;
-    await profile.save();
-
-    return res.json({
-      success: true,
-      message: 'Connection request sent'
-    });
-  } catch (error) {
-    console.error('requestConnection error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to send request'
-    });
-  }
-};
-
-exports.respondToConnectionRequest = async (req, res) => {
-  try {
-    // Not implemented since schema doesn't store request objects
-    return res.json({
-      success: true,
-      message: 'Connection response recorded (no-op)'
-    });
-  } catch (error) {
-    console.error('respondToConnectionRequest error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to respond'
-    });
-  }
-};
+module.exports =
+  mongoose.models.CAProfile ||
+  mongoose.model('CAProfile', caProfileSchema);

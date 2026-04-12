@@ -34,7 +34,7 @@ const normalizeProvince = (province = '') => {
     'PE',
     'QC',
     'SK',
-    'YT'
+    'YT',
   ];
 
   return validProvinces.includes(value) ? value : 'ON';
@@ -44,55 +44,28 @@ const normalizeProvince = (province = '') => {
 // @route   POST /api/auth/register
 exports.register = async (req, res) => {
   try {
-    let { name, email, password, userType, phoneNumber, province } = req.body;
+    let {
+      name,
+      email,
+      password,
+      userType,
+      phoneNumber,
+      province,
+      role,
+      firmName,
+      caNumber,
+    } = req.body;
 
-    name = typeof name === 'string' ? name.trim() : '';
-    email = typeof email === 'string' ? email.trim().toLowerCase() : '';
-    password = typeof password === 'string' ? password.trim() : '';
-    phoneNumber = phoneNumber ? normalizePhoneNumber(phoneNumber) : '';
+    console.log('REGISTER REQ BODY:', req.body);
 
-    if (!name) {
-      return res.status(400).json({
-        success: false,
-        message: 'Name is required'
-      });
-    }
+    name = String(name || '').trim();
+    email = String(email || '').trim().toLowerCase();
+    password = String(password || '');
+    firmName = String(firmName || '').trim();
+    caNumber = String(caNumber || '').trim();
 
-    if (!email) {
-      return res.status(400).json({
-        success: false,
-        message: 'Email is required'
-      });
-    }
-
-    if (!EMAIL_REGEX.test(email)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please enter a valid email'
-      });
-    }
-
-    if (!password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Password is required'
-      });
-    }
-
-    if (!PASSWORD_REGEX.test(password)) {
-      return res.status(400).json({
-        success: false,
-        message:
-          'Password must be at least 8 characters and include uppercase, lowercase, number, and special character'
-      });
-    }
-
-    if (phoneNumber && !PHONE_REGEX.test(phoneNumber)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please enter a valid phone number'
-      });
-    }
+    const normalizedPhone = normalizePhoneNumber(phoneNumber);
+    const cleanProvince = normalizeProvince(province);
 
     const allowedUserTypes = [
       'gig-worker',
@@ -101,17 +74,92 @@ exports.register = async (req, res) => {
       'business-owner',
       'student',
       'employee',
-      'other'
+      'other',
+      'professional',
     ];
 
-    const cleanUserType = allowedUserTypes.includes(userType) ? userType : 'employee';
-    const cleanProvince = normalizeProvince(province);
+    const cleanUserType = allowedUserTypes.includes(userType)
+      ? userType
+      : 'employee';
+
+    const cleanRole = ['user', 'ca', 'admin'].includes(role) ? role : 'user';
+
+    if (!name || !email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: [{ message: 'Name, email and password are required' }],
+      });
+    }
+
+    if (name.length < 2 || name.length > 50) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: [{ message: 'Name must be between 2 and 50 characters' }],
+      });
+    }
+
+    if (!EMAIL_REGEX.test(email)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: [{ message: 'Please provide a valid email' }],
+      });
+    }
+
+    if (password.includes(' ')) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: [{ message: 'Password cannot contain spaces' }],
+      });
+    }
+
+    if (!PASSWORD_REGEX.test(password)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: [
+          {
+            message:
+              'Password must be at least 8 characters and include uppercase, lowercase, number, and special character',
+          },
+        ],
+      });
+    }
+
+    if (phoneNumber && !PHONE_REGEX.test(normalizedPhone)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: [{ message: 'Please provide a valid phone number' }],
+      });
+    }
+
+    if (cleanRole === 'ca') {
+      if (!firmName) {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation failed',
+          errors: [{ message: 'Firm name is required for CA registration' }],
+        });
+      }
+
+      if (!caNumber) {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation failed',
+          errors: [{ message: 'CA number is required for CA registration' }],
+        });
+      }
+    }
 
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({
         success: false,
-        message: 'User already exists with this email'
+        message: 'User already exists with this email',
       });
     }
 
@@ -119,62 +167,28 @@ exports.register = async (req, res) => {
       name,
       email,
       password,
+      role: cleanRole,
       userType: cleanUserType,
-      phoneNumber: phoneNumber || undefined,
-      province: cleanProvince
+      phoneNumber: normalizedPhone || undefined,
+      province: cleanProvince,
+      firmName: firmName || '',
+      caNumber: caNumber || '',
     });
-
-    if (user.clientId) {
-      const qrCodeData = await QRCode.toDataURL(user.clientId);
-      user.clientIdQR = qrCodeData;
-      await user.save({ validateBeforeSave: false });
-    }
 
     const token = generateToken(user._id);
 
     return res.status(201).json({
       success: true,
       token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        userType: user.userType,
-        phoneNumber: user.phoneNumber,
-        province: user.province,
-        clientId: user.clientId,
-        clientIdQR: user.clientIdQR
-      }
+      user,
     });
   } catch (error) {
-    console.error('Registration error:', error);
-
-    if (error.name === 'ValidationError') {
-      const validationErrors = Object.values(error.errors).map((err) => ({
-        field: err.path,
-        message: err.message,
-        value: err.value
-      }));
-
-      return res.status(400).json({
-        success: false,
-        message: 'Validation failed',
-        errors: validationErrors
-      });
-    }
-
-    if (error.code === 11000) {
-      return res.status(400).json({
-        success: false,
-        message: 'User already exists with this email'
-      });
-    }
+    console.error('REGISTER ERROR:', error);
 
     return res.status(500).json({
       success: false,
-      message: 'Error creating user',
-      error: error.message
+      message: 'Server error during registration',
+      error: error.message,
     });
   }
 };
@@ -192,7 +206,7 @@ exports.getUserByClientId = async (req, res) => {
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: 'No user found with this Client ID'
+        message: 'No user found with this Client ID',
       });
     }
 
@@ -205,15 +219,15 @@ exports.getUserByClientId = async (req, res) => {
         userType: user.userType,
         phoneNumber: user.phoneNumber,
         province: user.province,
-        clientId: user.clientId
-      }
+        clientId: user.clientId,
+      },
     });
   } catch (error) {
     console.error('Error finding user by client ID:', error);
     return res.status(500).json({
       success: false,
       message: 'Error finding user',
-      error: error.message
+      error: error.message,
     });
   }
 };

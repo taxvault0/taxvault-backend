@@ -53,18 +53,18 @@ const authValidators = {
       .withMessage('Invalid role'),
 
     body('userType')
-      .optional({ values: 'falsy' })
-      .isIn([
-        'gig-worker',
-        'contractor',
-        'trades',
-        'business-owner',
-        'student',
-        'employee',
-        'other',
-        'professional'
-      ])
-      .withMessage('Invalid user type'),
+  .optional({ values: 'falsy' })
+  .isIn([
+    'gig-worker',
+    'contractor',
+    'trades',
+    'business-owner',
+    'student',
+    'employee',
+    'other',
+    'professional'
+  ])
+  .withMessage('Invalid user type'),
 
     body('phoneNumber')
       .optional({ values: 'falsy' })

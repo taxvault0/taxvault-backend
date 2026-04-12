@@ -47,20 +47,21 @@ const caRegistrationSchema = new mongoose.Schema(
       caDesignation: {
         type: String,
         trim: true,
-        enum: [
-          'Chartered Professional Accountant (CPA)',
-          'CPA, CA',
-          'CPA, CGA',
-          'CPA, CMA',
-          'Other'
-        ],
+        enum: ['CPA', 'CA', 'CGA', 'CMA', 'Other'],
         default: 'Other'
       },
       caNumber: {
         type: String,
         trim: true,
         uppercase: true,
-        match: [/^[A-Z0-9-]{5,15}$/, 'Invalid CA number']
+        default: '',
+        validate: {
+          validator: function (v) {
+            if (!v) return true;
+            return /^[A-Z0-9-]{5,15}$/.test(v);
+          },
+          message: 'Invalid CA number'
+        }
       },
       provinceOfRegistration: {
         type: String,
@@ -90,17 +91,23 @@ const caRegistrationSchema = new mongoose.Schema(
       country: { type: String, trim: true, default: 'Canada' },
       firmPhone: { type: String, trim: true, default: '', set: normalizePhone },
       firmEmail: { type: String, trim: true, lowercase: true, default: '' },
+
+      // updated to accept both simple and descriptive frontend values
       firmSize: {
         type: String,
         trim: true,
         enum: [
           'Solo',
+          'Small',
+          'Medium',
+          'Large',
           'Small (2-5 professionals)',
           'Medium (6-20 professionals)',
           'Large (21+ professionals)'
         ],
         default: 'Solo'
       },
+
       numberOfPartners: { type: Number, min: 0, default: 0 },
       numberOfStaff: { type: Number, min: 0, default: 0 },
       yearEstablished: { type: Number, min: 1900, max: 2100 }
@@ -113,7 +120,14 @@ const caRegistrationSchema = new mongoose.Schema(
         policyNumber: {
           type: String,
           trim: true,
-          match: [/^[A-Za-z0-9/-]{6,20}$/, 'Invalid policy number']
+          default: '',
+          validate: {
+            validator: function (v) {
+              if (!v) return true;
+              return /^[A-Za-z0-9/-]{6,20}$/.test(v);
+            },
+            message: 'Invalid policy number'
+          }
         },
         coverageAmount: { type: Number, min: 0, default: 0 },
         expiryDate: { type: Date },
@@ -230,4 +244,4 @@ const caRegistrationSchema = new mongoose.Schema(
   }
 );
 
-module.exports = mongoose.model('CARegistration', caRegistrationSchema);
+module.exports = mongoose.models.CARegistration || mongoose.model('CARegistration', caRegistrationSchema);
